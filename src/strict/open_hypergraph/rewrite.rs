@@ -286,6 +286,71 @@ where
     FiniteFunction::new(table, f.target())
 }
 
+struct BoundaryDecomposition<K: ArrayKind> {
+    host_inputs: FiniteFunction<K>,
+    host_outputs: FiniteFunction<K>,
+    lhs_inputs: FiniteFunction<K>,
+    lhs_outputs: FiniteFunction<K>,
+}
+
+fn decompose_context_boundary<K: ArrayKind, O, A>(
+    context: &OpenHypergraph<K, O, A>,
+    host_inputs_arity: K::I,
+    host_outputs_arity: K::I,
+    lhs_inputs_arity: K::I,
+    lhs_outputs_arity: K::I,
+) -> Option<BoundaryDecomposition<K>>
+where
+    K::Type<K::I>: NaturalArray<K>,
+{
+    // By construction we expect:
+    // context.s = host_inputs + lhs_outputs
+    // context.t = host_outputs + lhs_inputs
+    if host_inputs_arity.clone() + lhs_outputs_arity.clone() != context.s.source() {
+        return None;
+    }
+    if host_outputs_arity.clone() + lhs_inputs_arity.clone() != context.t.source() {
+        return None;
+    }
+
+    let host_inputs = slice_map(&context.s, K::I::zero(), host_inputs_arity.clone())?;
+    let lhs_outputs = slice_map(&context.s, host_inputs_arity, lhs_outputs_arity)?;
+
+    let host_outputs = slice_map(&context.t, K::I::zero(), host_outputs_arity.clone())?;
+    let lhs_inputs = slice_map(&context.t, host_outputs_arity, lhs_inputs_arity)?;
+
+    Some(BoundaryDecomposition {
+        host_inputs,
+        host_outputs,
+        lhs_inputs,
+        lhs_outputs,
+    })
+}
+
+fn build_boundary_gluing_span<K: ArrayKind, O, A>(
+    context: &OpenHypergraph<K, O, A>,
+    rhs: &OpenHypergraph<K, O, A>,
+    decomp: &BoundaryDecomposition<K>,
+) -> Option<(FiniteFunction<K>, FiniteFunction<K>)>
+where
+    K::Type<K::I>: NaturalArray<K>,
+    K::Type<O>: Array<K, O>,
+{
+    // Encode both sides into the shared coproduct of wire objects:
+    //   context.h.w + rhs.h.w
+    // The left leg uses boundary fragments from context.
+    let f_in = decomp.lhs_inputs.inject0(rhs.h.w.len());
+    let f_out = decomp.lhs_outputs.inject0(rhs.h.w.len());
+    let f = (&f_in + &f_out)?;
+
+    // The right leg uses RHS boundary maps into the right summand.
+    let g_in = rhs.s.inject1(context.h.w.len());
+    let g_out = rhs.t.inject1(context.h.w.len());
+    let g = (&g_in + &g_out)?;
+
+    Some((f, g))
+}
+
 // Build the pushout of the context and RHS along the shared boundary, then
 // reconstruct the outer interface from the context's host boundary segment.
 fn pushout_rewrite<K: ArrayKind, O, A>(
@@ -301,32 +366,19 @@ where
     K::Type<O>: Array<K, O> + PartialEq,
     K::Type<A>: Array<K, A> + PartialEq,
 {
-    // Slice out the LHS boundary segments from the context interface:
-    // - outputs of LHS live in the tail of context.s
-    // - inputs of LHS live in the tail of context.t
-    let c_s_out = slice_map(&context.s, host_inputs.clone(), lhs_outputs.clone())?;
-    let c_t_in = slice_map(&context.t, host_outputs.clone(), lhs_inputs.clone())?;
+    let decomp =
+        decompose_context_boundary(context, host_inputs, host_outputs, lhs_inputs, lhs_outputs)?;
 
-    // Build the span into the coproduct of wires:
-    // - f maps LHS boundary ports into the context part
-    // - g maps LHS boundary ports into the RHS part
-    let f_in = c_t_in.inject0(rhs.h.w.len());
-    let f_out = c_s_out.inject0(rhs.h.w.len());
-    let f = (&f_in + &f_out)?;
-
-    let g_in = rhs.s.inject1(context.h.w.len());
-    let g_out = rhs.t.inject1(context.h.w.len());
-    let g = (&g_in + &g_out)?;
+    // Build the span that glues RHS into the context hole along the boundary.
+    let (f, g) = build_boundary_gluing_span(context, rhs, &decomp)?;
 
     // Pushout the span to glue RHS into the hole.
     let (h, left_arrow, _right_arrow) = Hypergraph::pushout_along_span(&context.h, &rhs.h, &f, &g)?;
 
     // The outer interface is the prefix of the context boundary.
     // Reindex that prefix through the left arrow into the pushout.
-    let s_host = slice_map(&context.s, K::I::zero(), host_inputs)?;
-    let t_host = slice_map(&context.t, K::I::zero(), host_outputs)?;
-    let s = s_host.compose(&left_arrow.w)?;
-    let t = t_host.compose(&left_arrow.w)?;
+    let s = decomp.host_inputs.compose(&left_arrow.w)?;
+    let t = decomp.host_outputs.compose(&left_arrow.w)?;
 
     OpenHypergraph::new(s, t, h).ok()
 }
