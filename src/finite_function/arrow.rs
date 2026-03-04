@@ -229,6 +229,14 @@ where
         let counts = self.table.bincount(self.target.clone());
         counts.max().map_or(true, |m| m <= K::I::one())
     }
+
+    /// Check whether `self` and `other` are parallel and have disjoint images.
+    ///
+    /// Categorically, for parallel maps `f, g : A -> B`, this is equivalent to
+    /// asking whether `[f, g] : A + A -> B` is injective.
+    pub fn has_disjoint_image(&self, other: &Self) -> bool {
+        (self + other).is_some_and(|copair| copair.is_injective())
+    }
 }
 
 /// Compute the universal map for a coequalizer `q : B → Q` and arrow `f : B → T`, generalised to

@@ -687,6 +687,8 @@ fn delete_single_edge_rule_named(
 }
 
 fn injective_maps(domain: usize, target: usize) -> Vec<Vec<usize>> {
+    // This is exponential/factorial in practice (enumerates injections/permutations),
+    // and is intentionally used only in tests over very small graphs.
     fn backtrack(
         domain: usize,
         target: usize,
@@ -1516,4 +1518,38 @@ fn program_apply_rewrite_constant_propagation_in_context() {
     );
     let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&expected, &out));
+}
+
+#[test]
+fn smc_rule_rejects_overlapping_boundary_ports() {
+    let lhs = make_open_hypergraph_named([w("u", OBJ)], [], [inp("u")], [out("u")]);
+    let rhs = make_open_hypergraph_named([w("u", OBJ)], [], [inp("u")], [out("u")]);
+    assert!(SmcRewriteRule::new(lhs, rhs).is_none());
+}
+
+#[test]
+fn smc_match_preserves_boundary_disjointness_for_valid_rule() {
+    let r = circuit_rule_and_one();
+    let host = make_named_open_hypergraph(
+        [cw("x"), cw("one"), cw("y"), cw("out")],
+        [
+            g_const1("k1", "one"),
+            g_and("and", "x", "one", "y"),
+            g_not("n", "y", "out"),
+        ],
+        [inp("x")],
+        [out("out")],
+    );
+    let m = named_match_witness(
+        &r.rule,
+        &r.lhs,
+        &host,
+        &[("x", "x"), ("one", "one"), ("y", "y")],
+        &[("k1", "k1"), ("and", "and")],
+        &host.graph,
+    );
+
+    let lhs_inputs_in_host = (&r.lhs.graph.s >> m.w()).unwrap();
+    let lhs_outputs_in_host = (&r.lhs.graph.t >> m.w()).unwrap();
+    assert!(lhs_inputs_in_host.has_disjoint_image(&lhs_outputs_in_host));
 }

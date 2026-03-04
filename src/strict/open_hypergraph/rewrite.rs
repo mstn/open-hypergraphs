@@ -34,6 +34,7 @@ where
     pub fn validate(lhs: &OpenHypergraph<K, O, A>, rhs: &OpenHypergraph<K, O, A>) -> bool {
         Self::boundaries_match(lhs, rhs)
             && Self::boundary_legs_injective(lhs, rhs)
+            && Self::lhs_boundary_legs_disjoint(lhs)
             && Self::sides_monogamous_acyclic(lhs, rhs)
     }
 
@@ -53,6 +54,10 @@ where
         rhs: &OpenHypergraph<K, O, A>,
     ) -> bool {
         lhs.s.is_injective() && lhs.t.is_injective() && rhs.s.is_injective() && rhs.t.is_injective()
+    }
+
+    fn lhs_boundary_legs_disjoint(lhs: &OpenHypergraph<K, O, A>) -> bool {
+        lhs.s.has_disjoint_image(&lhs.t)
     }
 }
 
@@ -193,24 +198,6 @@ where
         in_match_mask.scatter_assign_constant(&m.w().table, true);
     }
 
-    let mut lhs_input_mask = K::Type::<bool>::fill(false, host.h.w.len());
-    if lhs_inputs_in_host.table.len() != K::I::zero() {
-        lhs_input_mask.scatter_assign_constant(&lhs_inputs_in_host.table, true);
-    }
-
-    let mut lhs_output_mask = K::Type::<bool>::fill(false, host.h.w.len());
-    if lhs_outputs_in_host.table.len() != K::I::zero() {
-        lhs_output_mask.scatter_assign_constant(&lhs_outputs_in_host.table, true);
-    }
-
-    // Boundary embedding must be injective: no overlap and no duplicate images.
-    if mask_overlap::<K>(&lhs_input_mask, &lhs_output_mask)
-        || !lhs_inputs_in_host.is_injective()
-        || !lhs_outputs_in_host.is_injective()
-    {
-        return None;
-    }
-
     // Build the remainder by removing the matched interior, but keep outer interface
     // and images of the LHS boundary ports.
     let mut remove_node_mask = in_match_mask.clone();
@@ -300,22 +287,6 @@ where
         table,
         target: inj.source(),
     })
-}
-
-// Check if a finite function is injective by ensuring no repeated targets.
-// Check whether two masks share any true entries.
-fn mask_overlap<K: ArrayKind>(a: &K::Type<bool>, b: &K::Type<bool>) -> bool
-where
-    K::Type<bool>: Array<K, bool>,
-{
-    let mut i = K::I::zero();
-    while i < a.len() {
-        if a.get(i.clone()) && b.get(i.clone()) {
-            return true;
-        }
-        i = i + K::I::one();
-    }
-    false
 }
 
 // Clear mask entries at the image of a finite function.
