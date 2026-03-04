@@ -1,21 +1,21 @@
 use crate::array::*;
 use crate::category::Arrow;
 use crate::finite_function::FiniteFunction;
-use crate::strict::hypergraph::arrow::{is_convex_subgraph_morphism, validate_hypergraph_morphism};
+use crate::strict::hypergraph::arrow::is_convex_subgraph_morphism;
 use crate::strict::hypergraph::subobject::SubgraphMorphism;
 use crate::strict::hypergraph::Hypergraph;
 use crate::strict::open_hypergraph::OpenHypergraph;
 use num_traits::{One, Zero};
 
-/// A rewrite rule for strict open hypergraphs.
+/// A rewrite rule for strict open hypergraphs under rewriting with
+/// symmetric monoidal structure (SMC).
 ///
-/// Both sides must have equal boundaries (same source/target objects).
-pub struct RewriteRule<K: ArrayKind, O, A> {
+pub struct SmcRewriteRule<K: ArrayKind, O, A> {
     lhs: OpenHypergraph<K, O, A>,
     rhs: OpenHypergraph<K, O, A>,
 }
 
-impl<K: ArrayKind, O, A> RewriteRule<K, O, A>
+impl<K: ArrayKind, O, A> SmcRewriteRule<K, O, A>
 where
     K::Type<K::I>: NaturalArray<K>,
     K::Type<bool>: Array<K, bool>,
@@ -56,7 +56,7 @@ where
     }
 }
 
-impl<K: ArrayKind, O, A> Clone for RewriteRule<K, O, A>
+impl<K: ArrayKind, O, A> Clone for SmcRewriteRule<K, O, A>
 where
     K::Type<O>: Clone,
     K::Type<A>: Clone,
@@ -71,7 +71,7 @@ where
 }
 
 impl<K: ArrayKind, O: core::fmt::Debug, A: core::fmt::Debug> core::fmt::Debug
-    for RewriteRule<K, O, A>
+    for SmcRewriteRule<K, O, A>
 where
     K::Index: core::fmt::Debug,
     K::Type<K::I>: core::fmt::Debug,
@@ -79,34 +79,40 @@ where
     K::Type<A>: core::fmt::Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("RewriteRule")
+        f.debug_struct("SmcRewriteRule")
             .field("lhs", &self.lhs)
             .field("rhs", &self.rhs)
             .finish()
     }
 }
 
-/// A convex match witness for a morphism `L -> host`, represented by maps on wires and operations.
-pub struct ConvexMatchWitness<K: ArrayKind> {
+/// A validated rewrite match witness for SMC rewriting, represented by maps on
+/// wires and operations.
+pub struct SmcRewriteMatch<'a, K: ArrayKind, O, A> {
+    rule: &'a SmcRewriteRule<K, O, A>,
+    host: &'a OpenHypergraph<K, O, A>,
     w: FiniteFunction<K>,
     x: FiniteFunction<K>,
 }
 
-impl<K: ArrayKind> ConvexMatchWitness<K> {
-    pub fn new<O, A>(
-        lhs: &OpenHypergraph<K, O, A>,
-        host: &MonogamousAcyclicHost<'_, K, O, A>,
+impl<'a, K: ArrayKind, O, A> SmcRewriteMatch<'a, K, O, A> {
+    pub fn new(
+        rule: &'a SmcRewriteRule<K, O, A>,
+        host: &'a OpenHypergraph<K, O, A>,
         w: FiniteFunction<K>,
         x: FiniteFunction<K>,
     ) -> Option<Self>
     where
         K::Type<K::I>: NaturalArray<K>,
+        K::Type<bool>: Array<K, bool>,
         K::Type<O>: Array<K, O> + PartialEq,
         K::Type<A>: Array<K, A> + PartialEq,
     {
-        // Reuse the shared borrowed checker (naturality + monic + convexity).
-        if is_convex_subgraph_morphism(&lhs.h, &host.inner.h, &w, &x) {
-            Some(Self { w, x })
+        if !host.is_monogamous() || !host.is_acyclic() {
+            return None;
+        }
+        if is_convex_subgraph_morphism(&rule.lhs.h, &host.h, &w, &x) {
+            Some(Self { rule, host, w, x })
         } else {
             None
         }
@@ -119,82 +125,51 @@ impl<K: ArrayKind> ConvexMatchWitness<K> {
     pub fn x(&self) -> &FiniteFunction<K> {
         &self.x
     }
+
+    pub fn rule(&self) -> &SmcRewriteRule<K, O, A> {
+        self.rule
+    }
+
+    pub fn host(&self) -> &OpenHypergraph<K, O, A> {
+        self.host
+    }
 }
 
-impl<K: ArrayKind> Clone for ConvexMatchWitness<K>
+impl<'a, K: ArrayKind, O, A> Clone for SmcRewriteMatch<'a, K, O, A>
 where
     K::Type<K::I>: Clone,
 {
     fn clone(&self) -> Self {
         Self {
+            rule: self.rule,
+            host: self.host,
             w: self.w.clone(),
             x: self.x.clone(),
         }
     }
 }
 
-impl<K: ArrayKind> core::fmt::Debug for ConvexMatchWitness<K>
+impl<'a, K: ArrayKind, O: core::fmt::Debug, A: core::fmt::Debug> core::fmt::Debug
+    for SmcRewriteMatch<'a, K, O, A>
 where
     K::Index: core::fmt::Debug,
     K::Type<K::I>: core::fmt::Debug,
+    K::Type<O>: core::fmt::Debug,
+    K::Type<A>: core::fmt::Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ConvexMatchWitness")
+        f.debug_struct("SmcRewriteMatch")
             .field("w", &self.w)
             .field("x", &self.x)
             .finish()
     }
 }
 
-/// A witness that a host open hypergraph is monogamous and acyclic.
-pub struct MonogamousAcyclicHost<'a, K: ArrayKind, O, A> {
-    inner: &'a OpenHypergraph<K, O, A>,
-}
-
-impl<'a, K: ArrayKind, O, A> MonogamousAcyclicHost<'a, K, O, A>
-where
-    K::Type<K::I>: NaturalArray<K>,
-    K::Type<bool>: Array<K, bool>,
-    K::Type<O>: Array<K, O>,
-    K::Type<A>: Array<K, A>,
-{
-    pub fn new(host: &'a OpenHypergraph<K, O, A>) -> Option<Self> {
-        if host.is_monogamous() && host.is_acyclic() {
-            Some(Self { inner: host })
-        } else {
-            None
-        }
-    }
-
-    pub fn host(&self) -> &OpenHypergraph<K, O, A> {
-        self.inner
-    }
-}
-
-fn assert_match_compatible<K: ArrayKind, O, A>(
-    rule: &RewriteRule<K, O, A>,
-    host: &OpenHypergraph<K, O, A>,
-    m: &ConvexMatchWitness<K>,
-) where
-    K::Type<K::I>: NaturalArray<K>,
-    K::Type<O>: Array<K, O> + PartialEq,
-    K::Type<A>: Array<K, A> + PartialEq,
-{
-    let naturality = validate_hypergraph_morphism(&rule.lhs.h, &host.h, m.w(), m.x());
-    assert!(
-        naturality.is_ok(),
-        "match witness is not a valid hypergraph morphism: {:?}",
-        naturality.err()
-    );
-}
-
 /// Apply a rewrite rule to `host` using a match `m : L -> host` where `L` is the apex of `lhs`.
 ///
 /// Returns `None` if the rewrite is invalid.
-pub fn apply_rewrite<K: ArrayKind, O, A>(
-    rule: &RewriteRule<K, O, A>,
-    host: &MonogamousAcyclicHost<'_, K, O, A>,
-    m: &ConvexMatchWitness<K>,
+pub fn apply_smc_rewrite<'a, K: ArrayKind, O, A>(
+    m: &SmcRewriteMatch<'a, K, O, A>,
 ) -> Option<OpenHypergraph<K, O, A>>
 where
     K::Type<K::I>: NaturalArray<K>,
@@ -202,13 +177,12 @@ where
     K::Type<O>: Array<K, O> + PartialEq,
     K::Type<A>: Array<K, A> + PartialEq,
     O: PartialEq,
-    for<'a> K::Slice<'a, K::I>: From<&'a [K::I]>,
+    for<'b> K::Slice<'b, K::I>: From<&'b [K::I]>,
 {
-    assert_match_compatible(rule, host.host(), m);
-
-    let host = host.host();
-    let lhs = &rule.lhs;
-    let rhs = &rule.rhs;
+    let rule = m.rule();
+    let host = m.host();
+    let lhs = rule.lhs();
+    let rhs = rule.rhs();
 
     // Compute where the LHS boundary lands in the host.
     let lhs_inputs_in_host = (&lhs.s >> m.w())?;
@@ -274,7 +248,7 @@ where
     pushout_rewrite(&context, rhs, h_in, h_out, l_in, l_out)
 }
 
-impl<K: ArrayKind, O, A> RewriteRule<K, O, A> {
+impl<K: ArrayKind, O, A> SmcRewriteRule<K, O, A> {
     pub fn lhs(&self) -> &OpenHypergraph<K, O, A> {
         &self.lhs
     }

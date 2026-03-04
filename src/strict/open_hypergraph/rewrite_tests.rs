@@ -5,7 +5,7 @@ use crate::indexed_coproduct::IndexedCoproduct;
 use crate::semifinite::SemifiniteFunction;
 use crate::strict::hypergraph::Hypergraph;
 use crate::strict::open_hypergraph::{
-    apply_rewrite, ConvexMatchWitness, MonogamousAcyclicHost, OpenHypergraph, RewriteRule,
+    apply_smc_rewrite, OpenHypergraph, SmcRewriteMatch, SmcRewriteRule,
 };
 use std::collections::HashMap;
 
@@ -221,13 +221,14 @@ where
     }
 }
 
-fn named_match_witness(
+fn named_match_witness<'a>(
+    rule: &'a SmcRewriteRule<VecKind, i32, i32>,
     lhs: &NamedOpenGraph,
     host: &NamedOpenGraph,
     wire_pairs: &[(&str, &str)],
     edge_pairs: &[(&str, &str)],
-    host_ma: &MonogamousAcyclicHost<'_, VecKind, i32, i32>,
-) -> ConvexMatchWitness<VecKind> {
+    host_graph: &'a OpenHypergraph<VecKind, i32, i32>,
+) -> SmcRewriteMatch<'a, VecKind, i32, i32> {
     let mut w_table = vec![usize::MAX; lhs.graph.h.w.len()];
     for (lhs_name, host_name) in wire_pairs {
         let l = *lhs
@@ -264,12 +265,12 @@ fn named_match_witness(
 
     let w = make_map(&w_table, host.graph.h.w.len());
     let x = make_map(&x_table, host.graph.h.x.len());
-    ConvexMatchWitness::new(&lhs.graph, host_ma, w, x).unwrap()
+    SmcRewriteMatch::new(rule, host_graph, w, x).unwrap()
 }
 
 struct FrobeniusSemiAlgebraRules {
-    fs3: RewriteRule<VecKind, i32, i32>,
-    fs4: RewriteRule<VecKind, i32, i32>,
+    fs3: SmcRewriteRule<VecKind, i32, i32>,
+    fs4: SmcRewriteRule<VecKind, i32, i32>,
     fs3_lhs: NamedOpenGraph,
     fs4_lhs: NamedOpenGraph,
 }
@@ -333,8 +334,8 @@ fn frobenius_semi_algebra_rules() -> FrobeniusSemiAlgebraRules {
     );
 
     // We orient both interaction rules towards the shared "μ then δ" shape.
-    let fs3 = RewriteRule::new(left_wing.graph.clone(), mu_then_delta.graph.clone()).unwrap();
-    let fs4 = RewriteRule::new(right_wing.graph.clone(), mu_then_delta.graph).unwrap();
+    let fs3 = SmcRewriteRule::new(left_wing.graph.clone(), mu_then_delta.graph.clone()).unwrap();
+    let fs4 = SmcRewriteRule::new(right_wing.graph.clone(), mu_then_delta.graph).unwrap();
     FrobeniusSemiAlgebraRules {
         fs3,
         fs4,
@@ -483,7 +484,7 @@ fn p_discard<'a>(logical_name: &'a str, in_w: &'a str) -> NamedEdge<'a> {
 }
 
 fn program_rule_assign_then_discard() -> (
-    RewriteRule<VecKind, i32, i32>,
+    SmcRewriteRule<VecKind, i32, i32>,
     NamedOpenGraph,
     NamedOpenGraph,
 ) {
@@ -496,12 +497,12 @@ fn program_rule_assign_then_discard() -> (
         [],
     );
     let rhs = make_named_open_hypergraph([pw("u")], [p_discard("discard_u", "u")], [inp("u")], []);
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     (rule, lhs, rhs)
 }
 
 struct CircuitRule {
-    rule: RewriteRule<VecKind, i32, i32>,
+    rule: SmcRewriteRule<VecKind, i32, i32>,
     lhs: NamedOpenGraph,
     rhs: NamedOpenGraph,
 }
@@ -514,7 +515,7 @@ fn circuit_rule_and_one() -> CircuitRule {
         [out("y")],
     );
     let rhs = make_named_open_hypergraph([cw("x")], [], [inp("x")], [out("x")]);
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     CircuitRule { rule, lhs, rhs }
 }
 
@@ -526,7 +527,7 @@ fn circuit_rule_xor_zero() -> CircuitRule {
         [out("y")],
     );
     let rhs = make_named_open_hypergraph([cw("x")], [], [inp("x")], [out("x")]);
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     CircuitRule { rule, lhs, rhs }
 }
 
@@ -538,12 +539,12 @@ fn circuit_rule_double_not() -> CircuitRule {
         [out("y")],
     );
     let rhs = make_named_open_hypergraph([cw("x")], [], [inp("x")], [out("x")]);
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     CircuitRule { rule, lhs, rhs }
 }
 
 fn fs1_associativity_rule_named() -> (
-    RewriteRule<VecKind, i32, i32>,
+    SmcRewriteRule<VecKind, i32, i32>,
     NamedOpenGraph,
     NamedOpenGraph,
 ) {
@@ -579,12 +580,12 @@ fn fs1_associativity_rule_named() -> (
         [inp("a"), inp("b"), inp("c")],
         [out("out")],
     );
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     (rule, lhs, rhs)
 }
 
 fn fs2_coassociativity_rule_named() -> (
-    RewriteRule<VecKind, i32, i32>,
+    SmcRewriteRule<VecKind, i32, i32>,
     NamedOpenGraph,
     NamedOpenGraph,
 ) {
@@ -620,12 +621,12 @@ fn fs2_coassociativity_rule_named() -> (
         [inp("in")],
         [out("a"), out("b"), out("c")],
     );
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     (rule, lhs, rhs)
 }
 
 fn ba_distributivity_rule_named() -> (
-    RewriteRule<VecKind, i32, i32>,
+    SmcRewriteRule<VecKind, i32, i32>,
     NamedOpenGraph,
     NamedOpenGraph,
 ) {
@@ -665,14 +666,14 @@ fn ba_distributivity_rule_named() -> (
         [inp("in_l"), inp("in_r")],
         [out("out_l"), out("out_r")],
     );
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     (rule, lhs, rhs)
 }
 
 fn delete_single_edge_rule_named(
     label: i32,
 ) -> (
-    RewriteRule<VecKind, i32, i32>,
+    SmcRewriteRule<VecKind, i32, i32>,
     NamedOpenGraph,
     NamedOpenGraph,
 ) {
@@ -685,7 +686,7 @@ fn delete_single_edge_rule_named(
         [out("b")],
     );
     let rhs = make_named_open_hypergraph([w("u", OBJ)], [], [inp("u")], [out("u")]);
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     (rule, lhs, rhs)
 }
 
@@ -837,18 +838,17 @@ fn apply_rewrite_replaces_matched_edge() {
         [inp("in")],
         [out("out")],
     );
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
-
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     let m = named_match_witness(
+        &rule,
         &lhs,
         &host,
         &[("in", "in"), ("out", "out")],
         &[("edge", "edge")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&rhs.graph, &out));
 }
 
@@ -861,17 +861,16 @@ fn apply_rewrite_removes_matched_subgraph_with_empty_rhs() {
         [inp("a")],
         [out("b")],
     );
-
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &lhs,
         &host,
         &[("a", "a"), ("b", "b")],
         &[("drop", "edge")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&rhs.graph, &out));
 }
 
@@ -879,8 +878,8 @@ fn apply_rewrite_removes_matched_subgraph_with_empty_rhs() {
 fn apply_rewrite_fs1_reassociates_mu_tree() {
     let (rule, lhs, rhs) = fs1_associativity_rule_named();
     let host = lhs;
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &host,
         &host,
         &[
@@ -891,10 +890,10 @@ fn apply_rewrite_fs1_reassociates_mu_tree() {
             ("out", "out"),
         ],
         &[("mu_left", "mu_left"), ("mu_top", "mu_top")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&rhs.graph, &out));
 }
 
@@ -902,16 +901,16 @@ fn apply_rewrite_fs1_reassociates_mu_tree() {
 fn apply_rewrite_fs2_reassociates_delta_tree() {
     let (rule, lhs, rhs) = fs2_coassociativity_rule_named();
     let host = lhs;
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &host,
         &host,
         &[("in", "in"), ("m", "m"), ("a", "a"), ("b", "b"), ("c", "c")],
         &[("delta_top", "delta_top"), ("delta_left", "delta_left")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&rhs.graph, &out));
 }
 
@@ -919,16 +918,16 @@ fn apply_rewrite_fs2_reassociates_delta_tree() {
 fn apply_rewrite_ba_distributivity_expands_to_expected_shape() {
     let (rule, lhs, rhs) = ba_distributivity_rule_named();
     let host = lhs;
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &host,
         &host,
         &[("a", "a"), ("b", "b"), ("m", "m"), ("x", "x"), ("y", "y")],
         &[("mu", "mu"), ("delta", "delta")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&rhs.graph, &out));
 }
 
@@ -953,17 +952,16 @@ fn apply_rewrite_delete_edge_in_context_keeps_rest() {
         [inp("in")],
         [out("mid")],
     );
-
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &lhs,
         &host,
         &[("a", "mid"), ("b", "out")],
         &[("drop", "drop_edge")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&expected, &out));
 }
 
@@ -981,10 +979,10 @@ fn frobenius_semi_algebra_example45_two_disjoint_matches_diverge() {
     // We choose wire ordering so each FS rule matches a different pair of
     // edges (disjoint edge sets), mirroring the setup in Example 45.
     let host = frobenius_example45_host_named();
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
 
     // FS3 match described declaratively by named wire/edge correspondences.
     let m_fs3 = named_match_witness(
+        &rules.fs3,
         &rules.fs3_lhs,
         &host,
         &[
@@ -995,12 +993,13 @@ fn frobenius_semi_algebra_example45_two_disjoint_matches_diverge() {
             ("y", "out_l"),
         ],
         &[("delta", "delta_l"), ("mu", "mu_l")],
-        &host_ma,
+        &host.graph,
     );
-    let h1 = apply_rewrite(&rules.fs3, &host_ma, &m_fs3).unwrap();
+    let h1 = apply_smc_rewrite(&m_fs3).unwrap();
 
     // FS4 match described declaratively by named wire/edge correspondences.
     let m_fs4 = named_match_witness(
+        &rules.fs4,
         &rules.fs4_lhs,
         &host,
         &[
@@ -1011,9 +1010,9 @@ fn frobenius_semi_algebra_example45_two_disjoint_matches_diverge() {
             ("y", "r_mid"),
         ],
         &[("delta", "delta_r"), ("mu", "mu_r")],
-        &host_ma,
+        &host.graph,
     );
-    let h2 = apply_rewrite(&rules.fs4, &host_ma, &m_fs4).unwrap();
+    let h2 = apply_smc_rewrite(&m_fs4).unwrap();
 
     let expected_h1 = expected_example45_after_fs3();
     let expected_h2 = expected_example45_after_fs4();
@@ -1036,16 +1035,16 @@ fn circuit_apply_rewrite_and_one_simplifies_to_identity() {
         [inp("x")],
         [out("y")],
     );
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &r.rule,
         &r.lhs,
         &host,
         &[("x", "x"), ("one", "one"), ("y", "y")],
         &[("k1", "k1"), ("and", "and")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&r.rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&r.rhs.graph, &out));
 }
 
@@ -1062,16 +1061,16 @@ fn circuit_apply_rewrite_xor_zero_simplifies_to_identity() {
         [inp("x")],
         [out("y")],
     );
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &r.rule,
         &r.lhs,
         &host,
         &[("x", "x"), ("zero", "zero"), ("y", "y")],
         &[("k0", "k0"), ("xor", "xor")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&r.rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&r.rhs.graph, &out));
 }
 
@@ -1088,16 +1087,16 @@ fn circuit_apply_rewrite_double_not_eliminates() {
         [inp("x")],
         [out("y")],
     );
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &r.rule,
         &r.lhs,
         &host,
         &[("x", "x"), ("m", "m"), ("y", "y")],
         &[("n1", "n1"), ("n2", "n2")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&r.rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&r.rhs.graph, &out));
 }
 
@@ -1118,7 +1117,7 @@ fn circuit_apply_rewrite_and_associativity_reassociates() {
         [inp("a"), inp("b"), inp("c")],
         [out("out")],
     );
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
 
     let host = make_named_open_hypergraph(
         [cw("a"), cw("b"), cw("c"), cw("m"), cw("out")],
@@ -1126,8 +1125,8 @@ fn circuit_apply_rewrite_and_associativity_reassociates() {
         [inp("a"), inp("b"), inp("c")],
         [out("out")],
     );
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &lhs,
         &host,
         &[
@@ -1138,10 +1137,10 @@ fn circuit_apply_rewrite_and_associativity_reassociates() {
             ("out", "out"),
         ],
         &[("and1", "and1"), ("and2", "and2")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&rhs.graph, &out));
 }
 
@@ -1160,7 +1159,7 @@ fn circuit_apply_rewrite_and_one_in_context() {
         [out("y")],
     );
     let rhs = make_named_open_hypergraph([cw("x")], [], [inp("x")], [out("x")]);
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
 
     let host = make_named_open_hypergraph(
         [cw("x"), cw("one"), cw("y"), cw("out")],
@@ -1178,17 +1177,16 @@ fn circuit_apply_rewrite_and_one_in_context() {
         [inp("x")],
         [out("out")],
     );
-
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &lhs,
         &host,
         &[("x", "x"), ("one", "one"), ("y", "y")],
         &[("k1", "k1"), ("and", "and")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&expected, &out));
 }
 
@@ -1207,7 +1205,7 @@ fn circuit_apply_rewrite_xor_zero_in_context() {
         [out("y")],
     );
     let rhs = make_named_open_hypergraph([cw("x")], [], [inp("x")], [out("x")]);
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
 
     let host = make_named_open_hypergraph(
         [cw("x"), cw("zero"), cw("y"), cw("c"), cw("out")],
@@ -1225,17 +1223,16 @@ fn circuit_apply_rewrite_xor_zero_in_context() {
         [inp("x"), inp("c")],
         [out("out")],
     );
-
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &lhs,
         &host,
         &[("x", "x"), ("zero", "zero"), ("y", "y")],
         &[("k0", "k0"), ("xor", "xor")],
-        &host_ma,
+        &host.graph,
     );
 
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&expected, &out));
 }
 
@@ -1284,16 +1281,15 @@ fn circuit_apply_rewrite_multiple_rules_pipeline_matches_expected_stubs() {
         [inp("x")],
         [out("out")],
     );
-
-    let host0_ma = MonogamousAcyclicHost::new(&host0.graph).unwrap();
     let m0 = named_match_witness(
+        &r_xor0.rule,
         &r_xor0.lhs,
         &host0,
         &[("x", "x"), ("zero", "zero"), ("y", "u")],
         &[("k0", "k0"), ("xor", "xor")],
-        &host0_ma,
+        &host0.graph,
     );
-    let out1 = apply_rewrite(&r_xor0.rule, &host0_ma, &m0).unwrap();
+    let out1 = apply_smc_rewrite(&m0).unwrap();
     assert!(isomorphic_with_boundary(&expected1, &out1));
 
     let host1 = make_named_open_hypergraph(
@@ -1313,16 +1309,15 @@ fn circuit_apply_rewrite_multiple_rules_pipeline_matches_expected_stubs() {
         [inp("x")],
         [out("out")],
     );
-
-    let host1_ma = MonogamousAcyclicHost::new(&host1.graph).unwrap();
     let m1 = named_match_witness(
+        &r_and1.rule,
         &r_and1.lhs,
         &host1,
         &[("x", "x"), ("one", "one"), ("y", "v")],
         &[("k1", "k1"), ("and", "and")],
-        &host1_ma,
+        &host1.graph,
     );
-    let out2 = apply_rewrite(&r_and1.rule, &host1_ma, &m1).unwrap();
+    let out2 = apply_smc_rewrite(&m1).unwrap();
     assert!(isomorphic_with_boundary(&expected2, &out2));
 
     let host2 = make_named_open_hypergraph(
@@ -1332,16 +1327,15 @@ fn circuit_apply_rewrite_multiple_rules_pipeline_matches_expected_stubs() {
         [out("out")],
     );
     let expected3 = make_open_hypergraph_named([cw("x")], [], [inp("x")], [out("x")]);
-
-    let host2_ma = MonogamousAcyclicHost::new(&host2.graph).unwrap();
     let m2 = named_match_witness(
+        &r_dnot.rule,
         &r_dnot.lhs,
         &host2,
         &[("x", "x"), ("m", "w"), ("y", "out")],
         &[("n1", "n1"), ("n2", "n2")],
-        &host2_ma,
+        &host2.graph,
     );
-    let out3 = apply_rewrite(&r_dnot.rule, &host2_ma, &m2).unwrap();
+    let out3 = apply_smc_rewrite(&m2).unwrap();
     assert!(isomorphic_with_boundary(&expected3, &out3));
 }
 
@@ -1377,16 +1371,15 @@ fn program_apply_rewrite_dead_code_elimination_in_context() {
         [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
-
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &lhs,
         &host,
         &[("u", "d"), ("v", "t1")],
         &[("assign", "assign"), ("discard_v", "discard_v")],
-        &host_ma,
+        &host.graph,
     );
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&expected, &out));
 }
 
@@ -1430,16 +1423,15 @@ fn program_apply_rewrite_dead_code_elimination_multiple_steps() {
         [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
-
-    let host0_ma = MonogamousAcyclicHost::new(&host0.graph).unwrap();
     let m0 = named_match_witness(
+        &rule,
         &lhs,
         &host0,
         &[("u", "t1"), ("v", "t2")],
         &[("assign", "assign"), ("discard_v", "discard_v")],
-        &host0_ma,
+        &host0.graph,
     );
-    let out1 = apply_rewrite(&rule, &host0_ma, &m0).unwrap();
+    let out1 = apply_smc_rewrite(&m0).unwrap();
     assert!(isomorphic_with_boundary(&expected1, &out1));
 
     let host1 = make_named_open_hypergraph(
@@ -1461,16 +1453,15 @@ fn program_apply_rewrite_dead_code_elimination_multiple_steps() {
         [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
-
-    let host1_ma = MonogamousAcyclicHost::new(&host1.graph).unwrap();
     let m1 = named_match_witness(
+        &rule,
         &lhs,
         &host1,
         &[("u", "d"), ("v", "t1")],
         &[("assign", "assign"), ("discard_v", "discard_v")],
-        &host1_ma,
+        &host1.graph,
     );
-    let out2 = apply_rewrite(&rule, &host1_ma, &m1).unwrap();
+    let out2 = apply_smc_rewrite(&m1).unwrap();
     assert!(isomorphic_with_boundary(&expected2, &out2));
 }
 
@@ -1501,7 +1492,7 @@ fn program_apply_rewrite_constant_propagation_in_context() {
         [inp("x")],
         [out("y")],
     );
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
+    let rule = SmcRewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
 
     let host = make_named_open_hypergraph(
         [pw("c"), pw("x"), pw("y"), pw("z")],
@@ -1519,15 +1510,14 @@ fn program_apply_rewrite_constant_propagation_in_context() {
         [inp("x")],
         [out("z")],
     );
-
-    let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
     let m = named_match_witness(
+        &rule,
         &lhs,
         &host,
         &[("c", "c"), ("x", "x"), ("y", "y")],
         &[("k1", "k1"), ("add", "add")],
-        &host_ma,
+        &host.graph,
     );
-    let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
+    let out = apply_smc_rewrite(&m).unwrap();
     assert!(isomorphic_with_boundary(&expected, &out));
 }
