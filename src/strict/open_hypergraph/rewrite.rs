@@ -237,6 +237,8 @@ where
     };
 
     // Factor boundary maps through the remainder injection to build the context L⊥.
+    // note: factor_through_injective panic if factorization is not possible
+    //       but it cannot happen in this function by construction
     let host_inputs = host.s.factor_through_injective(&kept_w_inj);
     let host_outputs = host.t.factor_through_injective(&kept_w_inj);
     let lhs_outputs = lhs_outputs_in_host.factor_through_injective(&kept_w_inj);
