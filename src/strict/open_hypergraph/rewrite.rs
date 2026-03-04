@@ -2,7 +2,6 @@ use crate::array::*;
 use crate::category::Arrow;
 use crate::finite_function::FiniteFunction;
 use crate::strict::hypergraph::arrow::is_convex_subgraph_morphism;
-use crate::strict::hypergraph::subobject::SubgraphMorphism;
 use crate::strict::hypergraph::Hypergraph;
 use crate::strict::open_hypergraph::OpenHypergraph;
 use num_traits::Zero;
@@ -193,26 +192,42 @@ where
     let lhs_inputs_in_host = (&lhs.s >> m.w())?;
     let lhs_outputs_in_host = (&lhs.t >> m.w())?;
 
-    let mut in_match_mask = K::Type::<bool>::fill(false, host.h.w.len());
-    if m.w().table.len() != K::I::zero() {
-        in_match_mask.scatter_assign_constant(&m.w().table, true);
-    }
+    let kept_x_inj = m.x().image_complement_injection()?;
+    let s_kept = host.h.s.map_indexes(&kept_x_inj)?;
+    let t_kept = host.h.t.map_indexes(&kept_x_inj)?;
 
-    // Build the remainder by removing the matched interior, but keep outer interface
-    // and images of the LHS boundary ports.
-    let mut remove_node_mask = in_match_mask.clone();
-    clear_mask_at(&mut remove_node_mask, &host.s);
-    clear_mask_at(&mut remove_node_mask, &host.t);
-    clear_mask_at(&mut remove_node_mask, &lhs_inputs_in_host);
-    clear_mask_at(&mut remove_node_mask, &lhs_outputs_in_host);
+    let kept_w_inj = m
+        .w()
+        .image_complement_injection()?
+        .coproduct_many(&[
+            &host.s,
+            &host.t,
+            &lhs_inputs_in_host,
+            &lhs_outputs_in_host,
+            &s_kept.values,
+            &t_kept.values,
+        ])?
+        .canonical_image_injection()?;
 
-    let mut remove_edge_mask = K::Type::<bool>::fill(false, host.h.x.len());
-    if m.x().table.len() != K::I::zero() {
-        remove_edge_mask.scatter_assign_constant(&m.x().table, true);
-    }
+    // Total inverse with explicit fill outside image(kept_w_inj).
+    // The fill value is never observed here because filtered incidence values
+    // lie in image(kept_w_inj) by construction.
+    let kept_w_inv = kept_w_inj.inverse_with_fill(K::I::zero())?;
 
-    let remainder = SubgraphMorphism::from_masks(&host.h, remove_node_mask, remove_edge_mask);
-    let (remainder, kept_w_inj, _kept_x_inj) = remainder.as_hypergraph_with_injections()?;
+    // Rebuild incidence by reindexing directly along the kept-edge injection,
+    // then remap values through inverse-on-image of kept_w_inj.
+    let new_s = host.h.s.map_indexes(&kept_x_inj)?.map_values(&kept_w_inv)?;
+    let new_t = host.h.t.map_indexes(&kept_x_inj)?.map_values(&kept_w_inv)?;
+
+    let new_w = (&kept_w_inj >> &host.h.w)?;
+    let new_x = (&kept_x_inj >> &host.h.x)?;
+
+    let remainder = Hypergraph {
+        s: new_s,
+        t: new_t,
+        w: new_w,
+        x: new_x,
+    };
 
     // Factor boundary maps through the remainder injection to build the context L⊥.
     let host_inputs = host.s.factor_through_injective(&kept_w_inj);
@@ -242,16 +257,6 @@ impl<K: ArrayKind, O, A> SmcRewriteRule<K, O, A> {
 
     pub fn rhs(&self) -> &OpenHypergraph<K, O, A> {
         &self.rhs
-    }
-}
-
-// Clear mask entries at the image of a finite function.
-fn clear_mask_at<K: ArrayKind>(mask: &mut K::Type<bool>, f: &FiniteFunction<K>)
-where
-    K::Type<bool>: Array<K, bool>,
-{
-    if f.table.len() != K::I::zero() {
-        mask.scatter_assign_constant(&f.table, false);
     }
 }
 

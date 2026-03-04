@@ -240,6 +240,46 @@ where
         (self + other).is_some_and(|copair| copair.is_injective())
     }
 
+    /// Build the canonical injection of the complement of `image(self)` in the codomain.
+    ///
+    /// For `self : A -> B`, returns `k : (B \\ image(self)) -> B`.
+    /// The domain may be empty.
+    pub fn image_complement_injection(&self) -> Option<Self> {
+        let mut marker = K::Index::fill(K::I::zero(), self.target.clone());
+        if !self.table.is_empty() {
+            marker.scatter_assign_constant(&self.table, K::I::one());
+        }
+        let kept_ix = marker.zero();
+        FiniteFunction::new(kept_ix, self.target.clone())
+    }
+
+    /// Build the canonical injection of `image(self)` into the codomain.
+    ///
+    /// For `self : A -> B`, returns `i : image(self) -> B`.
+    pub fn canonical_image_injection(&self) -> Option<Self> {
+        let (unique, _) = self.table.sparse_bincount();
+        FiniteFunction::new(unique, self.target.clone())
+    }
+
+    /// Build the coproduct of parallel maps into a common codomain.
+    ///
+    /// For parallel maps `self, f_i : A_i -> B`, returns
+    /// `[self, f_1, ..., f_n] : A + A_1 + ... + A_n -> B`.
+    pub fn coproduct_many(&self, others: &[&Self]) -> Option<Self> {
+        let target = self.target.clone();
+        for m in others {
+            if m.target != target {
+                return None;
+            }
+        }
+
+        let mut merged = self.clone();
+        for m in others {
+            merged = (&merged + *m)?;
+        }
+        Some(merged)
+    }
+
     /// Build a total inverse for an injective map by choosing a fill value outside its image.
     ///
     /// For `f : A -> B` injective, returns `f_inv : B -> A` such that:
