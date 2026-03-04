@@ -1,6 +1,7 @@
 use crate::array::*;
 use crate::category::Arrow;
 use crate::finite_function::FiniteFunction;
+use crate::strict::hypergraph::arrow::{is_convex_subgraph_morphism, validate_hypergraph_morphism};
 use crate::strict::hypergraph::subobject::SubgraphMorphism;
 use crate::strict::hypergraph::Hypergraph;
 use crate::strict::open_hypergraph::OpenHypergraph;
@@ -100,12 +101,11 @@ impl<K: ArrayKind> ConvexMatchWitness<K> {
     ) -> Option<Self>
     where
         K::Type<K::I>: NaturalArray<K>,
-        K::Type<bool>: Array<K, bool>,
-        K::Type<O>: Array<K, O>,
-        K::Type<A>: Array<K, A>,
+        K::Type<O>: Array<K, O> + PartialEq,
+        K::Type<A>: Array<K, A> + PartialEq,
     {
-        // Matches are required to be injective and convex.
-        if w.is_injective() && x.is_injective() && is_convex_subgraph(lhs, host.inner, &w, &x) {
+        // Reuse the shared borrowed checker (naturality + monic + convexity).
+        if is_convex_subgraph_morphism(&lhs.h, &host.inner.h, &w, &x) {
             Some(Self { w, x })
         } else {
             None
@@ -171,21 +171,6 @@ where
     }
 }
 
-fn is_convex_subgraph<K: ArrayKind, O, A>(
-    _lhs: &OpenHypergraph<K, O, A>,
-    _host: &OpenHypergraph<K, O, A>,
-    _w: &FiniteFunction<K>,
-    _x: &FiniteFunction<K>,
-) -> bool
-where
-    K::Type<K::I>: NaturalArray<K>,
-    K::Type<O>: Array<K, O>,
-    K::Type<A>: Array<K, A>,
-{
-    // TODO: implement convexity check
-    true
-}
-
 fn assert_match_compatible<K: ArrayKind, O, A>(
     rule: &RewriteRule<K, O, A>,
     host: &OpenHypergraph<K, O, A>,
@@ -195,23 +180,11 @@ fn assert_match_compatible<K: ArrayKind, O, A>(
     K::Type<O>: Array<K, O> + PartialEq,
     K::Type<A>: Array<K, A> + PartialEq,
 {
-    let lhs = &rule.lhs;
-
+    let naturality = validate_hypergraph_morphism(&rule.lhs.h, &host.h, m.w(), m.x());
     assert!(
-        m.w().table.len() == lhs.h.w.len() && m.w().target == host.h.w.len(),
-        "match witness on wires has incompatible source/target"
-    );
-    assert!(
-        m.x().table.len() == lhs.h.x.len() && m.x().target == host.h.x.len(),
-        "match witness on operations has incompatible source/target"
-    );
-    assert!(
-        lhs.h.w == (m.w() >> &host.h.w).expect("wire composition must be defined"),
-        "match witness is not natural on wires"
-    );
-    assert!(
-        lhs.h.x == (m.x() >> &host.h.x).expect("operation composition must be defined"),
-        "match witness is not natural on operations"
+        naturality.is_ok(),
+        "match witness is not a valid hypergraph morphism: {:?}",
+        naturality.err()
     );
 }
 
