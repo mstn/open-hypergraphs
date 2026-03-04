@@ -5,7 +5,7 @@ use crate::strict::hypergraph::arrow::is_convex_subgraph_morphism;
 use crate::strict::hypergraph::subobject::SubgraphMorphism;
 use crate::strict::hypergraph::Hypergraph;
 use crate::strict::open_hypergraph::OpenHypergraph;
-use num_traits::{One, Zero};
+use num_traits::Zero;
 
 /// A rewrite rule for strict open hypergraphs under rewriting with
 /// symmetric monoidal structure (SMC).
