@@ -240,6 +240,47 @@ where
         (self + other).is_some_and(|copair| copair.is_injective())
     }
 
+    /// Build a total inverse for an injective map by choosing a fill value outside its image.
+    ///
+    /// For `f : A -> B` injective, returns `f_inv : B -> A` such that:
+    /// - `f_inv ; f = id_A` on `image(f)` (left-inverse property),
+    /// - for `b` not in `image(f)`, `f_inv(b) = fill`.
+    ///
+    /// This is useful when callers only apply `f_inv` to values known to be in `image(f)`,
+    /// while still requiring a total finite function at the type level.
+    ///
+    /// Returns `None` when:
+    /// - `self` is not injective, or
+    /// - `fill` is out of bounds for `A`, or
+    /// - `A` is empty and `B` is non-empty (no total map `B -> A` exists).
+    pub fn inverse_with_fill(&self, fill: K::I) -> Option<Self> {
+        if !self.is_injective() {
+            return None;
+        }
+
+        if self.source().is_zero() {
+            if self.target().is_zero() {
+                return Some(FiniteFunction {
+                    table: K::Index::empty(),
+                    target: K::I::zero(),
+                });
+            }
+            return None;
+        }
+
+        if fill >= self.source() {
+            return None;
+        }
+
+        let mut inverse = K::Index::fill(fill, self.target());
+        let values = K::Index::arange(&K::I::zero(), &self.source());
+        inverse.scatter_assign(&self.table, values);
+        Some(FiniteFunction {
+            table: inverse,
+            target: self.source(),
+        })
+    }
+
     /// Factor `self : A -> C` through an injective map `inj : B -> C`.
     ///
     /// Returns the unique `g : A -> B` such that `self = g ; inj`.

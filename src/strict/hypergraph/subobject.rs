@@ -63,26 +63,15 @@ where
         // Complexity: O(|W| + |X| + |incidence|) to build injections and remap incidence.
         let host = self.host;
 
-        // Compute kept node/edge indices and remap table.
+        // Compute kept node/edge indices.
         let mut kept_nodes = Vec::<K::I>::new();
-        let mut remap_vec = Vec::<K::I>::new();
-        let mut next = K::I::zero();
         let mut i = K::I::zero();
         while i < host.w.len() {
             if !self.remove_node_mask.get(i.clone()) {
                 kept_nodes.push(i.clone());
-                remap_vec.push(next.clone());
-                next = next + K::I::one();
-            } else {
-                // Placeholder index for removed nodes. Kept segments never reference these,
-                // because by construction the subgraph is non-dangling
-                // so the value is irrelevant as long as the remap target is nonempty.
-                remap_vec.push(K::I::zero());
             }
             i = i + K::I::one();
         }
-        let remap_table = index_from_vec::<K>(&remap_vec);
-        let new_w_len = next.clone();
 
         let mut kept_edges = Vec::<K::I>::new();
         let mut e = K::I::zero();
@@ -101,7 +90,7 @@ where
         let new_w = (&kept_w_inj >> &host.w)?;
         let new_x = (&kept_x_inj >> &host.x)?;
 
-        if new_w_len == K::I::zero() {
+        if kept_nodes.is_empty() {
             // No nodes remain. For a non-dangling subgraph this can only yield an empty hypergraph.
             if !kept_edges.is_empty() {
                 return None;
@@ -109,16 +98,15 @@ where
             return Some((Hypergraph::empty(), kept_w_inj, kept_x_inj));
         }
 
-        // Rebuild incidence by filtering kept edges and remapping node indices.
-        let remap = FiniteFunction::new(remap_table, new_w_len)?;
-        let new_s = host
-            .s
-            .remove_segments(&self.remove_edge_mask)?
-            .map_values(&remap)?;
-        let new_t = host
-            .t
-            .remove_segments(&self.remove_edge_mask)?
-            .map_values(&remap)?;
+        // Total inverse with explicit fill outside image(kept_w_inj).
+        // The fill value is never observed here because filtered incidence values
+        // lie in image(kept_w_inj) by construction.
+        let kept_w_inv = kept_w_inj.inverse_with_fill(K::I::zero())?;
+
+        // Rebuild incidence by reindexing directly along the kept-edge injection,
+        // then factor values through the node injection kept_w_inj : kept_nodes -> host_nodes.
+        let new_s = host.s.map_indexes(&kept_x_inj)?.map_values(&kept_w_inv)?;
+        let new_t = host.t.map_indexes(&kept_x_inj)?.map_values(&kept_w_inv)?;
 
         let remainder = Hypergraph {
             s: new_s,
