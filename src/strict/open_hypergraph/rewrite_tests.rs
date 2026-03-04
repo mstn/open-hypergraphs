@@ -676,17 +676,15 @@ fn delete_single_edge_rule_named(
     NamedOpenGraph,
     NamedOpenGraph,
 ) {
+    // Strictly monogamous + acyclic "delete edge" surrogate:
+    // a -> b  (1 -> 1)  rewrites to a single boundary wire (identity-like).
     let lhs = make_named_open_hypergraph(
         [w("a", OBJ), w("b", OBJ)],
         [e("drop", ["a"], ["b"], label)],
-        [],
-        [],
+        [inp("a")],
+        [out("b")],
     );
-    let rhs_wires: [NamedWire<'static>; 0] = [];
-    let rhs_edges: [NamedEdge<'static>; 0] = [];
-    let rhs_inputs: [BoundaryPort<'static>; 0] = [];
-    let rhs_outputs: [BoundaryPort<'static>; 0] = [];
-    let rhs = make_named_open_hypergraph(rhs_wires, rhs_edges, rhs_inputs, rhs_outputs);
+    let rhs = make_named_open_hypergraph([w("u", OBJ)], [], [inp("u")], [out("u")]);
     let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
     (rule, lhs, rhs)
 }
@@ -856,33 +854,16 @@ fn apply_rewrite_replaces_matched_edge() {
 
 #[test]
 fn apply_rewrite_removes_matched_subgraph_with_empty_rhs() {
+    let (rule, lhs, rhs) = delete_single_edge_rule_named(20);
     let host = make_named_open_hypergraph(
-        [w("a", 10), w("b", 11)],
+        [w("a", OBJ), w("b", OBJ)],
         [e("edge", ["a"], ["b"], 20)],
-        [],
-        [],
+        [inp("a")],
+        [out("b")],
     );
-    let lhs = make_named_open_hypergraph(
-        [w("a", 10), w("b", 11)],
-        [e("edge", ["a"], ["b"], 20)],
-        [],
-        [],
-    );
-    let rhs_wires: [NamedWire<'static>; 0] = [];
-    let rhs_edges: [NamedEdge<'static>; 0] = [];
-    let rhs_inputs: [BoundaryPort<'static>; 0] = [];
-    let rhs_outputs: [BoundaryPort<'static>; 0] = [];
-    let rhs = make_named_open_hypergraph(rhs_wires, rhs_edges, rhs_inputs, rhs_outputs);
-    let rule = RewriteRule::new(lhs.graph.clone(), rhs.graph.clone()).unwrap();
 
     let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
-    let m = named_match_witness(
-        &lhs,
-        &host,
-        &[("a", "a"), ("b", "b")],
-        &[("edge", "edge")],
-        &host_ma,
-    );
+    let m = named_match_witness(&lhs, &host, &[("a", "a"), ("b", "b")], &[("drop", "edge")], &host_ma);
 
     let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
     assert!(isomorphic_with_boundary(&rhs.graph, &out));
@@ -949,8 +930,8 @@ fn apply_rewrite_ba_distributivity_expands_to_expected_shape() {
 fn apply_rewrite_delete_edge_in_context_keeps_rest() {
     let (rule, lhs, _rhs_empty) = delete_single_edge_rule_named(40);
 
-    // Host has two edges; rule should delete only "drop_edge" and preserve
-    // "keep_edge" and the open boundary.
+    // Host has two edges; rule should delete only the self-loop "drop_edge"
+    // and preserve "keep_edge" plus open boundary.
     let host = make_named_open_hypergraph(
         [w("in", OBJ), w("mid", OBJ), w("out", OBJ)],
         [
@@ -961,10 +942,10 @@ fn apply_rewrite_delete_edge_in_context_keeps_rest() {
         [out("out")],
     );
     let expected = make_open_hypergraph_named(
-        [w("in", OBJ), w("mid", OBJ), w("out", OBJ)],
+        [w("in", OBJ), w("mid", OBJ)],
         [e("keep_edge", ["in"], ["mid"], 30)],
         [inp("in")],
-        [out("out")],
+        [out("mid")],
     );
 
     let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
@@ -1378,7 +1359,7 @@ fn program_apply_rewrite_dead_code_elimination_in_context() {
             p_assign("assign", "d", "t1"),
             p_discard("discard_v", "t1"),
         ],
-        [inp("a"), inp("b")],
+        [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
     let expected = make_open_hypergraph_named(
@@ -1387,7 +1368,7 @@ fn program_apply_rewrite_dead_code_elimination_in_context() {
             p_add("live_add", "a", "b", "out"),
             p_discard("discard_u", "d"),
         ],
-        [inp("a"), inp("b")],
+        [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
 
@@ -1430,7 +1411,7 @@ fn program_apply_rewrite_dead_code_elimination_multiple_steps() {
             p_assign("assign", "t1", "t2"),
             p_discard("discard_v", "t2"),
         ],
-        [inp("a"), inp("b")],
+        [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
     let expected1 = make_open_hypergraph_named(
@@ -1440,7 +1421,7 @@ fn program_apply_rewrite_dead_code_elimination_multiple_steps() {
             p_assign("assign_1", "d", "t1"),
             p_discard("discard_u", "t1"),
         ],
-        [inp("a"), inp("b")],
+        [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
 
@@ -1462,7 +1443,7 @@ fn program_apply_rewrite_dead_code_elimination_multiple_steps() {
             p_assign("assign", "d", "t1"),
             p_discard("discard_v", "t1"),
         ],
-        [inp("a"), inp("b")],
+        [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
     let expected2 = make_open_hypergraph_named(
@@ -1471,7 +1452,7 @@ fn program_apply_rewrite_dead_code_elimination_multiple_steps() {
             p_add("live_add", "a", "b", "out"),
             p_discard("discard_u", "d"),
         ],
-        [inp("a"), inp("b")],
+        [inp("a"), inp("b"), inp("d")],
         [out("out")],
     );
 
