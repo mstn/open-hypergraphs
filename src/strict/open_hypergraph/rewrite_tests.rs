@@ -1,5 +1,5 @@
 use crate::array::vec::{VecArray, VecKind};
-use crate::category::{Arrow, Coproduct};
+use crate::category::Arrow;
 use crate::finite_function::FiniteFunction;
 use crate::indexed_coproduct::IndexedCoproduct;
 use crate::semifinite::SemifiniteFunction;
