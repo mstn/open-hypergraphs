@@ -196,6 +196,13 @@ where
     let s_kept = host.h.s.map_indexes(&kept_x_inj)?;
     let t_kept = host.h.t.map_indexes(&kept_x_inj)?;
 
+    // Build the kept-wire injection in two steps:
+    // 1) Start from the complement of matched wires in the host.
+    // 2) Add wires that must remain in the context:
+    //    - host boundary wires,
+    //    - images of LHS boundary wires under the match,
+    //    - all endpoints of kept edges (incidence closure).
+    // Finally, canonicalize to an injection image -> host.w.
     let kept_w_inj = m
         .w()
         .image_complement_injection()?
