@@ -346,10 +346,6 @@ fn frobenius_semi_algebra_rules() -> FrobeniusSemiAlgebraRules {
 
 /// Example 45 host diagram from the paper (a 2 -> 2 open hypergraph with
 /// two comultiplications feeding two multiplications).
-fn frobenius_example45_host() -> OpenHypergraph<VecKind, i32, i32> {
-    frobenius_example45_host_named().graph
-}
-
 fn frobenius_example45_host_named() -> NamedOpenGraph {
     make_named_open_hypergraph(
         [
