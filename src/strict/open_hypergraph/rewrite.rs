@@ -215,10 +215,10 @@ where
     let (remainder, kept_w_inj, _kept_x_inj) = remainder.as_hypergraph_with_injections()?;
 
     // Factor boundary maps through the remainder injection to build the context L⊥.
-    let host_inputs = factor_through_injection(&host.s, &kept_w_inj)?;
-    let host_outputs = factor_through_injection(&host.t, &kept_w_inj)?;
-    let lhs_outputs = factor_through_injection(&lhs_outputs_in_host, &kept_w_inj)?;
-    let lhs_inputs = factor_through_injection(&lhs_inputs_in_host, &kept_w_inj)?;
+    let host_inputs = host.s.factor_through_injective(&kept_w_inj);
+    let host_outputs = host.t.factor_through_injective(&kept_w_inj);
+    let lhs_outputs = lhs_outputs_in_host.factor_through_injective(&kept_w_inj);
+    let lhs_inputs = lhs_inputs_in_host.factor_through_injective(&kept_w_inj);
 
     let s_ctx = (&host_inputs + &lhs_outputs)?;
     let t_ctx = (&host_outputs + &lhs_inputs)?;
@@ -243,50 +243,6 @@ impl<K: ArrayKind, O, A> SmcRewriteRule<K, O, A> {
     pub fn rhs(&self) -> &OpenHypergraph<K, O, A> {
         &self.rhs
     }
-}
-
-// Factor a boundary map `f : B -> W_H` through an injection `inj : W_R -> W_H`.
-// here W_H is the host, and W_R the remainder.
-// If every boundary wire lies in the image of `inj`, this returns the unique
-// `f' : B -> W_R` such that `f = f' ; inj`. Otherwise returns `None`.
-fn factor_through_injection<K: ArrayKind>(
-    f: &FiniteFunction<K>,
-    inj: &FiniteFunction<K>,
-) -> Option<FiniteFunction<K>>
-where
-    K::Type<K::I>: NaturalArray<K>,
-    K::Type<bool>: Array<K, bool>,
-{
-    if f.target() != inj.target() {
-        return None;
-    }
-
-    // Build mask for the image of inj.
-    let mut in_image = K::Type::<bool>::fill(false, inj.target());
-    if inj.table.len() != K::I::zero() {
-        in_image.scatter_assign_constant(&inj.table, true);
-    }
-
-    // Ensure every boundary element lies in the image of inj.
-    let mut i = K::I::zero();
-    while i < f.table.len() {
-        let w = f.table.get(i.clone());
-        if !in_image.get(w) {
-            return None;
-        }
-        i = i + K::I::one();
-    }
-
-    // Build a left-inverse on the image and reindex boundary elements.
-    let mut inverse = K::Type::<K::I>::fill(K::I::zero(), inj.target());
-    let values: K::Type<K::I> = K::Index::arange(&K::I::zero(), &inj.source()).into();
-    inverse.scatter_assign(&inj.table, values);
-
-    let table: K::Index = inverse.gather(f.table.get_range(..)).into();
-    Some(FiniteFunction {
-        table,
-        target: inj.source(),
-    })
 }
 
 // Clear mask entries at the image of a finite function.

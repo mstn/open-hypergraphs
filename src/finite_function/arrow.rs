@@ -230,12 +230,49 @@ where
         counts.max().map_or(true, |m| m <= K::I::one())
     }
 
-    /// Check whether `self` and `other` are parallel and have disjoint images.
+    /// Check whether `self` and `other` have disjoint images in a common codomain.
     ///
-    /// Categorically, for parallel maps `f, g : A -> B`, this is equivalent to
-    /// asking whether `[f, g] : A + A -> B` is injective.
+    /// Domains may differ. Categorically, for maps `f : A -> B` and `g : C -> B`,
+    /// this is equivalent to asking whether `[f, g] : A + C -> B` is injective.
+    ///
+    /// Returns `false` when codomains differ.
     pub fn has_disjoint_image(&self, other: &Self) -> bool {
         (self + other).is_some_and(|copair| copair.is_injective())
+    }
+
+    /// Factor `self : A -> C` through an injective map `inj : B -> C`.
+    ///
+    /// Returns the unique `g : A -> B` such that `self = g ; inj`.
+    ///
+    pub fn factor_through_injective(&self, inj: &Self) -> Self {
+        assert_eq!(
+            self.target(),
+            inj.target(),
+            "factor_through_injective requires parallel maps"
+        );
+        assert!(
+            inj.is_injective(),
+            "factor_through_injective requires an injective map"
+        );
+
+        // Build a left-inverse table on `inj`'s image and reindex `self`.
+        let values: K::Type<K::I> = K::Index::arange(&K::I::zero(), &inj.source()).into();
+        let inverse: K::Type<K::I> = values.scatter(inj.table.get_range(..), inj.target());
+        let table: K::Index = inverse.gather(self.table.get_range(..)).into();
+        let factored = FiniteFunction {
+            table,
+            target: inj.source(),
+        };
+
+        let recomposed = factored
+            .compose(inj)
+            .expect("factor_through_injective: invalid codomain after factoring");
+        assert!(
+            recomposed == *self,
+            "factor_through_injective requires image(self) subset image(inj)"
+        );
+
+        factored
     }
 }
 
