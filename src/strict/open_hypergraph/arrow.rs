@@ -326,10 +326,7 @@ where
         let in_sum = in_degrees + in_counts;
         let out_sum = out_degrees + out_counts;
         let exactly_one_per_node = |xs: K::Index| {
-            xs.zero().is_empty()
-                && xs
-                    .max()
-                    .map_or(node_count.is_zero(), |m| m <= K::I::one())
+            xs.zero().is_empty() && xs.max().map_or(node_count.is_zero(), |m| m <= K::I::one())
         };
 
         exactly_one_per_node(in_sum) && exactly_one_per_node(out_sum)

@@ -863,7 +863,13 @@ fn apply_rewrite_removes_matched_subgraph_with_empty_rhs() {
     );
 
     let host_ma = MonogamousAcyclicHost::new(&host.graph).unwrap();
-    let m = named_match_witness(&lhs, &host, &[("a", "a"), ("b", "b")], &[("drop", "edge")], &host_ma);
+    let m = named_match_witness(
+        &lhs,
+        &host,
+        &[("a", "a"), ("b", "b")],
+        &[("drop", "edge")],
+        &host_ma,
+    );
 
     let out = apply_rewrite(&rule, &host_ma, &m).unwrap();
     assert!(isomorphic_with_boundary(&rhs.graph, &out));
