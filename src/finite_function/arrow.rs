@@ -283,11 +283,16 @@ where
             }
         }
 
-        let mut merged = self.clone();
+        let mut tables = Vec::<&K::Index>::with_capacity(others.len() + 1);
+        tables.push(&self.table);
         for m in others {
-            merged = (&merged + *m)?;
+            tables.push(&m.table);
         }
-        Some(merged)
+
+        Some(FiniteFunction {
+            table: K::Index::concatenate_many(&tables),
+            target,
+        })
     }
 
     /// Build a total inverse for an injective map by choosing a fill value outside its image.
