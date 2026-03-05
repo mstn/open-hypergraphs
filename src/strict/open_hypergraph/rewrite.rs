@@ -279,31 +279,6 @@ impl<K: ArrayKind, O, A> SmcRewriteRule<K, O, A> {
     }
 }
 
-fn build_boundary_gluing_span<K: ArrayKind, O, A>(
-    context: &OpenHypergraph<K, O, A>,
-    rhs: &OpenHypergraph<K, O, A>,
-    lhs_inputs: &FiniteFunction<K>,
-    lhs_outputs: &FiniteFunction<K>,
-) -> Option<(FiniteFunction<K>, FiniteFunction<K>)>
-where
-    K::Type<K::I>: NaturalArray<K>,
-    K::Type<O>: Array<K, O>,
-{
-    // Encode both sides into the shared coproduct of wire objects:
-    //   context.h.w + rhs.h.w
-    // The left leg uses boundary fragments from context.
-    let f_in = lhs_inputs.inject0(rhs.h.w.len());
-    let f_out = lhs_outputs.inject0(rhs.h.w.len());
-    let f = (&f_in + &f_out)?;
-
-    // The right leg uses RHS boundary maps into the right summand.
-    let g_in = rhs.s.inject1(context.h.w.len());
-    let g_out = rhs.t.inject1(context.h.w.len());
-    let g = (&g_in + &g_out)?;
-
-    Some((f, g))
-}
-
 // Build the pushout of the context and RHS along the shared boundary, then
 // reconstruct the outer interface from the context's host boundary segment.
 fn pushout_rewrite<K: ArrayKind, O, A>(
@@ -320,7 +295,11 @@ where
     K::Type<A>: Array<K, A> + PartialEq,
 {
     // Build the span that glues RHS into the context hole along the boundary.
-    let (f, g) = build_boundary_gluing_span(context, rhs, lhs_inputs, lhs_outputs)?;
+
+    // Left leg into context wires: B = I + O -> Wc.
+    let f = (lhs_inputs + lhs_outputs)?;
+    // Right leg into RHS wires: B = I + O -> Wr.
+    let g = (&rhs.s + &rhs.t)?;
 
     // Pushout the span to glue RHS into the hole.
     let (h, left_arrow, _right_arrow) = Hypergraph::pushout_along_span(&context.h, &rhs.h, &f, &g)?;

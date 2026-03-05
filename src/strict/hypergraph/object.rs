@@ -177,8 +177,15 @@ where
         K::Type<O>: Array<K, O> + PartialEq,
         K::Type<A>: Array<K, A> + PartialEq,
     {
-        // Coequalize the span to obtain the identification of wires.
-        let q = f.coequalizer(g)?;
+        if f.target() != left.w.len() || g.target() != right.w.len() {
+            return None;
+        }
+
+        // Lift span legs into the shared coproduct codomain left.w + right.w
+        // and coequalize to obtain the wire identifications.
+        let f_lift = f.inject0(right.w.len());
+        let g_lift = g.inject1(left.w.len());
+        let q = f_lift.coequalizer(&g_lift)?;
         // Form the coproduct hypergraph and quotient its vertices by the coequalizer.
         let coproduct = left + right;
         let target = coproduct.coequalize_vertices(&q)?;
