@@ -296,9 +296,9 @@ where
 {
     // Build the span that glues RHS into the context hole along the boundary.
 
-    // Left leg into context wires: B = I + O -> Wc.
+    // Left leg into context wires: LHS(I) + LHS(O) -> Context(W).
     let f = (lhs_inputs + lhs_outputs)?;
-    // Right leg into RHS wires: B = I + O -> Wr.
+    // Right leg into RHS wires: LHS(I) + LHS(O) -> RHS(W).
     let g = (&rhs.s + &rhs.t)?;
 
     // Pushout the span to glue RHS into the hole.
