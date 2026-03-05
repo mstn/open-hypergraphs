@@ -236,7 +236,13 @@ where
         x: new_x,
     };
 
-    // Factor boundary maps through the remainder injection to build the context L⊥.
+    // Factor boundary maps through the remainder injection to build the context.
+    // Mathematically: with host.s : I_H -> W_H and kept_w_inj : W_K -> W_H injective,
+    // host_inputs : I_H -> W_K is the unique map such that
+    // host.s = host_inputs ; kept_w_inj.
+    //
+    // similar for others
+    //
     // note: factor_through_injective panic if factorization is not possible
     //       but it cannot happen in this function by construction
     let host_inputs = host.s.factor_through_injective(&kept_w_inj);
@@ -244,9 +250,11 @@ where
     let lhs_outputs = lhs_outputs_in_host.factor_through_injective(&kept_w_inj);
     let lhs_inputs = lhs_inputs_in_host.factor_through_injective(&kept_w_inj);
 
-    let s_ctx = (&host_inputs + &lhs_outputs)?;
-    let t_ctx = (&host_outputs + &lhs_inputs)?;
-    let context = OpenHypergraph::new(s_ctx, t_ctx, remainder).ok()?;
+    // Intuitively, the context is host with a hole where we can plug in lhs
+    // Hence, inputs are host inputs and lhs outputs, similarly for outputs
+    let ctx_inputs = (&host_inputs + &lhs_outputs)?;
+    let ctx_outputs = (&host_outputs + &lhs_inputs)?;
+    let context = OpenHypergraph::new(ctx_inputs, ctx_outputs, remainder).ok()?;
     if !context.is_monogamous() {
         return None;
     }
